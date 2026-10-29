@@ -221,27 +221,22 @@ const styles = StyleSheet.create({
 
   filterWrapper: {
     flexGrow: 0,
-    flexShrink: 0,
   },
 
   filters: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 20,
     paddingBottom: 8,
     gap: 8,
   },
 
   pill: {
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    marginRight: 8,
   },
 
   pillActive: {

@@ -1,61 +1,23 @@
-import {
-  AudioModule,
-  RecordingPresets,
-  setAudioModeAsync,
-  useAudioPlayer,
-  useAudioRecorder,
-  useAudioRecorderState,
-} from "expo-audio";
-import React, { useContext, useState } from "react";
+import { useRouter } from "expo-router";
+import { useContext, useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import SearchBar from "../components/SearchBar";
-import VoiceCircle from "../components/VoiceCircle";
+import CaptureBar from "../components/CaptureBar";
 import { useAuth } from "../utils/AuthContext";
 import {
-  handleReminder,
-  requestNotificationPermission,
+  handleReminder
 } from "../utils/notifications";
-import { colors } from "../utils/theme";
+import { colors, typeMeta } from "../utils/theme";
 import { EntriesContext } from "./_layout";
 
 const localUrl = "https://pocketjournal.onrender.com";
-
-function uploadAudio(uri, token) {
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append("audio", {
-      uri,
-      name: "recording.m4a",
-      type: "audio/m4a",
-    });
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${localUrl}/upload`);
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText));
-        } catch (err) {
-          reject(err);
-        }
-      } else {
-        reject(new Error(`Upload failed: ${xhr.status}`));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error("Network error"));
-    xhr.send(formData);
-  });
-}
 
 function greeting() {
   const hour = new Date().getHours();
@@ -72,156 +34,51 @@ function todayLabel() {
   });
 }
 
-function RecorderSection({ setAudioUri, player, setRefreshKey, session }) {
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(audioRecorder);
-
-  const submitSearch = async (voiceMessage) => {
-    const response = await fetch(`${localUrl}/entries`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ text: voiceMessage.transcript }),
-    });
-
-    if (!response.ok) {
-      console.log("Saving voice entry failed:", response.status);
-      return;
-    }
-
-    const savedEntry = await response.json();
-    await handleReminder(savedEntry);
-
-    setRefreshKey((prev) => prev + 1);
-  };
-
-  const startRecording = async () => {
-    const permission = await AudioModule.requestRecordingPermissionsAsync();
-    if (!permission.granted) {
-      console.log("Mic permission denied");
-      return;
-    }
-
-    await setAudioModeAsync({
-      allowsRecording: true,
-      playsInSilentMode: true,
-    });
-
-    await audioRecorder.prepareToRecordAsync();
-    audioRecorder.record();
-  };
-
-  const stopRecording = async () => {
-    await audioRecorder.stop();
-
-    const uri = audioRecorder.uri;
-    setAudioUri(uri);
-
-    let voiceMessage;
-    try {
-      voiceMessage = await uploadAudio(uri, session.access_token);
-    } catch (err) {
-      console.log("Transcription failed:", err.message);
-      return;
-    }
-
-    await submitSearch(voiceMessage);
-  };
-
+function isToday(dateString) {
+  if (!dateString) return false;
+  const d = new Date(dateString);
+  const now = new Date();
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>Voice entry</Text>
-      <Text style={styles.cardSubtitle}>
-        Hold the circle, speak naturally, and let go to save it.
-      </Text>
-
-      <View style={styles.voiceArea}>
-        <VoiceCircle
-          startRecording={startRecording}
-          stopRecording={stopRecording}
-        />
-        <Text style={styles.recordingStatus}>
-          {recorderState.isRecording ? "Listening..." : "Ready when you are"}
-        </Text>
-      </View>
-
-      <Pressable
-        style={[
-          styles.secondaryButton,
-          !audioRecorder.uri && styles.disabledButton,
-        ]}
-        onPress={() => player.play()}
-      >
-        <Text style={styles.secondaryButtonText}>Play last recording</Text>
-      </Pressable>
-    </View>
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
   );
 }
 
-function TypingSection({ setRefreshKey, session }) {
-  const [input, setInput] = useState("");
-
-  const submitSearch = async () => {
-    if (!input.trim()) return;
-
-    const savedInput = input;
-    setInput("");
-
-    const response = await fetch(`${localUrl}/entries`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ text: savedInput }),
-    });
-
-    if (!response.ok) {
-      console.log("Saving entry failed:", response.status);
-      setInput(savedInput);
-      return;
-    }
-
-    const savedEntry = await response.json();
-    await handleReminder(savedEntry);
-
-    setRefreshKey((prev) => prev + 1);
-  };
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>New entry</Text>
-      <Text style={styles.cardSubtitle}>
-        A thought, a task, a reminder, an event — just write it.
-      </Text>
-
-      <View style={styles.inputBox}>
-        <SearchBar value={input} onChange={setInput} />
-      </View>
-
-      <Pressable
-        style={[styles.primaryButton, !input.trim() && styles.disabledButton]}
-        onPress={submitSearch}
-      >
-        <Text style={styles.primaryButtonText}>Save entry</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-export default function Index() {
-  const { setRefreshKey } = useContext(EntriesContext);
+export default function Today() {
   const { session } = useAuth();
-  const [audioUri, setAudioUri] = useState(null);
-  const [isRecorderPage, setIsRecorderPage] = useState(false);
+  const { setRefreshKey } = useContext(EntriesContext);
+  const router = useRouter();
+  const [todayEntries, setTodayEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
-    requestNotificationPermission();
-  }, []);
+  async function loadToday() {
+    if (!session) return;
 
-  const player = useAudioPlayer(audioUri);
+    const response = await fetch(`${localUrl}/entries`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!response.ok) {
+      setLoading(false);
+      return;
+    }
+
+    const entries = await response.json();
+    const list = Array.isArray(entries) ? entries : [];
+    setTodayEntries(list.filter((e) => isToday(e.created_at)));
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadToday();
+  }, [session]);
+
+  async function handleSaved(savedEntry) {
+    await handleReminder(savedEntry);
+    setTodayEntries((prev) => [savedEntry, ...prev]);
+    setRefreshKey((prev) => prev + 1);
+  }
 
   return (
     <KeyboardAvoidingView
@@ -233,52 +90,36 @@ export default function Index() {
         <Text style={styles.title}>{greeting()}</Text>
       </View>
 
-      <View style={styles.toggleRow}>
-        <Pressable
-          style={[
-            styles.toggleButton,
-            !isRecorderPage && styles.toggleButtonActive,
-          ]}
-          onPress={() => setIsRecorderPage(false)}
-        >
-          <Text
-            style={[
-              styles.toggleText,
-              !isRecorderPage && styles.toggleTextActive,
-            ]}
-          >
-            Type
-          </Text>
-        </Pressable>
+      <CaptureBar session={session} onSaved={handleSaved} />
 
-        <Pressable
-          style={[
-            styles.toggleButton,
-            isRecorderPage && styles.toggleButtonActive,
-          ]}
-          onPress={() => setIsRecorderPage(true)}
-        >
-          <Text
-            style={[
-              styles.toggleText,
-              isRecorderPage && styles.toggleTextActive,
-            ]}
-          >
-            Voice
-          </Text>
+      <View style={styles.listHeader}>
+        <Text style={styles.listTitle}>Today</Text>
+        <Pressable onPress={() => router.push("/entries")}>
+          <Text style={styles.viewAll}>View all →</Text>
         </Pressable>
       </View>
 
-      {isRecorderPage ? (
-        <RecorderSection
-          player={player}
-          setRefreshKey={setRefreshKey}
-          setAudioUri={setAudioUri}
-          session={session}
-        />
-      ) : (
-        <TypingSection setRefreshKey={setRefreshKey} session={session} />
-      )}
+      <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+        {!loading && todayEntries.length === 0 && (
+          <Text style={styles.emptyText}>
+            Nothing added today yet. Type or hold the mic above to start.
+          </Text>
+        )}
+
+        {todayEntries.map((entry) => {
+          const meta = typeMeta[entry.type] || typeMeta.statement;
+          return (
+            <View key={entry.id} style={styles.row}>
+              <View style={[styles.dot, { backgroundColor: meta.fg }]} />
+              <Text style={styles.rowText} numberOfLines={1}>
+                {entry.title || entry.raw_text}
+              </Text>
+            </View>
+          );
+        })}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -292,7 +133,7 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    marginBottom: 24,
+    marginBottom: 18,
   },
 
   eyebrow: {
@@ -305,107 +146,67 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: "800",
     color: colors.ink,
   },
 
-  toggleRow: {
+  listHeader: {
     flexDirection: "row",
-    backgroundColor: colors.primarySoft,
-    borderRadius: 18,
-    padding: 4,
-    marginBottom: 20,
-  },
-
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 14,
+    justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 26,
+    marginBottom: 10,
   },
 
-  toggleButtonActive: {
-    backgroundColor: colors.card,
-  },
-
-  toggleText: {
-    color: colors.inkSoft,
+  listTitle: {
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
+    color: colors.ink,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
 
-  toggleTextActive: {
+  viewAll: {
+    fontSize: 14,
+    fontWeight: "700",
     color: colors.primary,
   },
 
-  card: {
+  list: {
+    flex: 1,
+  },
+
+  emptyText: {
+    color: colors.inkSoft,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingVertical: 12,
+  },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: 22,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 8,
   },
 
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: colors.ink,
-    marginBottom: 4,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
   },
 
-  cardSubtitle: {
-    fontSize: 14,
-    color: colors.inkSoft,
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-
-  inputBox: {
-    marginBottom: 16,
-  },
-
-  primaryButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  primaryButtonText: {
-    color: colors.cream,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  secondaryButton: {
-    marginTop: 18,
-    backgroundColor: colors.bg,
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-
-  secondaryButtonText: {
-    color: colors.ink,
+  rowText: {
+    flex: 1,
     fontSize: 15,
-    fontWeight: "700",
-  },
-
-  disabledButton: {
-    opacity: 0.45,
-  },
-
-  voiceArea: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-  },
-
-  recordingStatus: {
-    marginTop: 14,
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.primary,
+    color: colors.ink,
+    fontWeight: "600",
   },
 });

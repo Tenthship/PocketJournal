@@ -1,50 +1,165 @@
-# Welcome to your Expo app 👋
+# Pocket Journal
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A mobile journaling and productivity app that turns everyday thoughts into organized notes, tasks, reminders, and events.
 
-## Get started
+Type an entry or record a voice message. Pocket Journal uses Google Gemini to identify useful details such as dates, categories, and priorities, then saves the entry for later.
 
-1. Install dependencies
+![Main Page](docs/PocketJournal1.PNG)
+![Entry Page No Search](docs/PocketJournal2.PNG)
+![Entry Page Search](docs/PocketJournal3.PNG)
 
-   ```bash
-   npm install
-   ```
+## Features
 
-2. Start the app
+- Text and press-and-hold voice entries
+- Audio transcription using Google Gemini
+- AI classification into notes, tasks, reminders, and events
+- Automatic extraction of titles, dates, priorities, and keywords
+- Search across entry text, titles, descriptions, and keywords
+- Filtering by entry type
+- Editing and deleting saved entries
+- Local reminder notifications
+- Supabase authentication and user-specific entries
 
-   ```bash
-   npx expo start
-   ```
+## Tech Stack
 
-In the output, you'll find options to open the app in a
+| Layer           | Technology                    |
+| --------------- | ----------------------------- |
+| Mobile app      | React Native, Expo            |
+| Navigation      | Expo Router                   |
+| Backend         | Node.js, Express              |
+| Database        | PostgreSQL hosted on Supabase |
+| Authentication  | Supabase Auth                 |
+| AI processing   | Google Gemini                 |
+| Audio recording | Expo Audio                    |
+| Notifications   | Expo Notifications            |
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## How It Works
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+1. The user signs in through Supabase Auth.
+2. The app sends requests to the Express backend with the user's access token.
+3. For voice entries, the backend sends the recording to Gemini for transcription.
+4. Gemini converts the entry text into structured JSON.
+5. The backend saves the entry in PostgreSQL, associated with the authenticated user.
+6. The app displays the entry and schedules a local notification when applicable.
 
-## Get a fresh project
+Entry requests are authenticated, and database queries restrict access to the current user's entries.
 
-When you're ready, run:
+## Project Structure
+
+- `app/` — screens and navigation
+- `components/` — reusable interface components
+- `utils/` — authentication, notifications, and theme utilities
+- `backend/server.js` — API routes, authentication middleware, and Gemini integration
+- `backend/db.js` — PostgreSQL connection
+- `assets/` — app icons and images
+
+## Development Setup
+
+### Requirements
+
+- Node.js and npm
+- A Supabase project with authentication enabled
+- A PostgreSQL database with the application's `entries` table
+- A Gemini API key
+- An Android or iOS development environment, or an installed Expo development build
+
+### Clone the repository
 
 ```bash
-npm run reset-project
+git clone https://github.com/Tenthship/PocketJournal.git
+cd PocketJournal
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Backend
 
-## Learn more
+Install dependencies:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+cd backend
+npm install
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Create `backend/.env`:
 
-## Join the community
+```env
+DATABASE_URL=your_postgresql_connection_string
+GEMINI_API_KEY=your_gemini_api_key
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+PORT=3000
+```
 
-Join our community of developers creating universal apps.
+Start the server from the `backend` directory:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm start
+```
+
+The backend listens on port 3000 by default.
+
+### Database
+
+The backend expects an existing `entries` table. Database creation
+scripts and migrations are not yet included in this repository, so
+installing dependencies alone does not complete database setup.
+
+### Mobile app
+
+In a second terminal, install dependencies from the project root:
+
+```bash
+npm install
+```
+
+Update the Supabase configuration in `utils/supabase.js` to use your
+own project.
+
+The frontend currently references a hosted backend URL. To use your
+own backend, replace occurrences of
+`https://pocketjournal.onrender.com` in the frontend source.
+
+When testing on a physical phone, use your computer's local network
+IP address rather than `localhost`. The phone must be able to reach
+the backend.
+
+For local native development:
+
+```bash
+npx expo run:android
+```
+
+Or, on macOS with Xcode:
+
+```bash
+npx expo run:ios
+```
+
+If a compatible development build is already installed:
+
+```bash
+npx expo start --dev-client
+```
+
+Allow microphone and notification permissions when prompted.
+Use a development build when testing native functionality.
+
+## API
+
+All endpoints except `/` require a valid Supabase Bearer token.
+
+| Method | Endpoint       | Purpose                                |
+| ------ | -------------- | -------------------------------------- |
+| GET    | `/`            | Basic server response                  |
+| GET    | `/entries`     | Retrieve the current user's entries    |
+| POST   | `/entries`     | Process and save text using AI         |
+| PUT    | `/entries/:id` | Update an entry's text                 |
+| DELETE | `/entries/:id` | Delete an entry                        |
+| POST   | `/upload`      | Transcribe an uploaded audio recording |
+
+## Current Limitations
+
+- Database setup requires manual configuration.
+- Frontend service configuration is currently defined in source files.
+- Search uses text matching rather than semantic AI search.
+- Editing text does not rerun AI classification.
+- AI-generated dates and classifications may need review.

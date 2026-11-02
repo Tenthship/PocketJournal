@@ -61,7 +61,7 @@ function AppNavigator() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: "Today",
           href: user ? undefined : null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />

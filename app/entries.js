@@ -18,6 +18,23 @@ function formatTime(dateString) {
   });
 }
 
+function dayBucket(dateString) {
+  if (!dateString) return "Earlier";
+
+  const d = new Date(dateString);
+  const now = new Date();
+  const startOf = (date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return "Earlier";
+}
+
+const BUCKET_ORDER = ["Today", "Yesterday", "Earlier"];
+
 export default function Entries() {
   const { refreshKey } = useContext(EntriesContext);
   const { session } = useAuth();
@@ -81,16 +98,19 @@ export default function Entries() {
 
   const visibleEntries = dbEntries.filter((entry) => {
     const matchesType = currentType === "All" || entry.type === currentType;
-
     const matchesSearch =
       search === "" ||
       entry.raw_text?.toLowerCase().includes(search) ||
       entry.title?.toLowerCase().includes(search) ||
       entry.description?.toLowerCase().includes(search) ||
-      entry.keywords?.some((keyword) => keyword.toLowerCase().includes(search));
-
+      entry.keywords?.some((k) => k.toLowerCase().includes(search));
     return matchesType && matchesSearch;
   });
+
+  const grouped = BUCKET_ORDER.map((bucket) => ({
+    bucket,
+    entries: visibleEntries.filter((e) => dayBucket(e.created_at) === bucket),
+  })).filter((group) => group.entries.length > 0);
 
   return (
     <View style={styles.container}>
@@ -123,63 +143,66 @@ export default function Entries() {
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {visibleEntries.length === 0 && (
+        {grouped.length === 0 && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>Nothing here yet</Text>
             <Text style={styles.emptyBody}>
               {dbEntries.length === 0
-                ? "Add your first entry from the Home tab."
+                ? "Add your first entry from the Today tab."
                 : "Try a different filter or search term."}
             </Text>
           </View>
         )}
 
-        {visibleEntries.map((entry) => {
-          const meta = typeMeta[entry.type] || typeMeta.statement;
+        {grouped.map((group) => (
+          <View key={group.bucket} style={styles.group}>
+            <Text style={styles.groupLabel}>{group.bucket}</Text>
 
-          return (
-            <Pressable key={entry.id} onPress={() => setShowEntry(entry)}>
-              <View
-                style={[styles.entryCard, { backgroundColor: colors.card }]}
-              >
-                <View style={[styles.rail, { backgroundColor: meta.fg }]} />
+            {group.entries.map((entry) => {
+              const meta = typeMeta[entry.type] || typeMeta.statement;
+              return (
+                <Pressable key={entry.id} onPress={() => setShowEntry(entry)}>
+                  <View
+                    style={[styles.entryCard, { backgroundColor: colors.card }]}
+                  >
+                    <View style={[styles.rail, { backgroundColor: meta.fg }]} />
+                    <View style={styles.cardBody}>
+                      <View style={styles.cardHeader}>
+                        <View
+                          style={[styles.chip, { backgroundColor: meta.bg }]}
+                        >
+                          <Text style={[styles.chipText, { color: meta.fg }]}>
+                            {meta.label}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => handleDelete(entry.id)}
+                          hitSlop={8}
+                        >
+                          <AntDesign
+                            name="delete"
+                            size={16}
+                            color={colors.inkSoft}
+                          />
+                        </Pressable>
+                      </View>
 
-                <View style={styles.cardBody}>
-                  <View style={styles.cardHeader}>
-                    <View style={[styles.chip, { backgroundColor: meta.bg }]}>
-                      <Text style={[styles.chipText, { color: meta.fg }]}>
-                        {meta.label}
+                      <Text style={styles.title}>
+                        {entry.title || entry.raw_text || "Untitled"}
+                      </Text>
+                      <Text style={styles.description} numberOfLines={3}>
+                        {entry.description || entry.raw_text}
+                      </Text>
+                      <Text style={styles.time}>
+                        {formatTime(entry.created_at)}
                       </Text>
                     </View>
-
-                    <Pressable
-                      onPress={() => handleDelete(entry.id)}
-                      hitSlop={8}
-                    >
-                      <AntDesign
-                        name="delete"
-                        size={16}
-                        color={colors.inkSoft}
-                      />
-                    </Pressable>
                   </View>
-
-                  <Text style={styles.title}>
-                    {entry.title || entry.raw_text || "Untitled"}
-                  </Text>
-
-                  <Text style={styles.description} numberOfLines={3}>
-                    {entry.description || entry.raw_text}
-                  </Text>
-
-                  <Text style={styles.time}>
-                    {formatTime(entry.created_at || entry.date)}
-                  </Text>
-                </View>
-              </View>
-            </Pressable>
-          );
-        })}
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
 
         <View style={{ height: 80 }} />
       </ScrollView>
@@ -188,17 +211,8 @@ export default function Entries() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 14,
-  },
-
+  container: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 14 },
   eyebrow: {
     fontSize: 12,
     color: colors.inkSoft,
@@ -206,77 +220,50 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     fontWeight: "600",
   },
-
-  h1: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: colors.ink,
-    marginTop: 2,
-  },
-
-  searchWrap: {
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-
+  h1: { fontSize: 32, fontWeight: "800", color: colors.ink, marginTop: 2 },
+  searchWrap: { paddingHorizontal: 20, marginBottom: 12 },
   filterWrapper: {
     flexGrow: 0,
+    flexShrink: 0,
   },
-
   filters: {
     paddingHorizontal: 20,
-    paddingBottom: 8,
-    gap: 8,
-  },
-
-  pill: {
-    paddingHorizontal: 14,
     paddingVertical: 8,
+    alignItems: "center",
+  },
+  pill: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
     borderRadius: 999,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
     marginRight: 8,
   },
-
-  pillActive: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
-  },
-
-  pillText: {
+  pillActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  pillText: { fontSize: 13, fontWeight: "600", color: colors.inkSoft },
+  pillTextActive: { color: colors.cream },
+  list: { padding: 20, paddingTop: 8 },
+  group: { marginBottom: 18 },
+  groupLabel: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "800",
     color: colors.inkSoft,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 10,
   },
-
-  pillTextActive: {
-    color: colors.cream,
-  },
-
-  list: {
-    padding: 20,
-    paddingTop: 8,
-  },
-
-  emptyState: {
-    paddingVertical: 60,
-    alignItems: "center",
-  },
-
+  emptyState: { paddingVertical: 60, alignItems: "center" },
   emptyTitle: {
     fontSize: 17,
     fontWeight: "700",
     color: colors.ink,
     marginBottom: 6,
   },
-
-  emptyBody: {
-    fontSize: 14,
-    color: colors.inkSoft,
-    textAlign: "center",
-  },
-
+  emptyBody: { fontSize: 14, color: colors.inkSoft, textAlign: "center" },
   entryCard: {
     flexDirection: "row",
     borderWidth: 1,
@@ -285,50 +272,27 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     overflow: "hidden",
   },
-
-  rail: {
-    width: 4,
-  },
-
-  cardBody: {
-    flex: 1,
-    padding: 14,
-  },
-
+  rail: { width: 4 },
+  cardBody: { flex: 1, padding: 14 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-
-  chipText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
+  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  chipText: { fontSize: 11, fontWeight: "700" },
   title: {
     fontSize: 16,
     fontWeight: "700",
     color: colors.ink,
     marginBottom: 4,
   },
-
   description: {
     fontSize: 14,
     color: colors.inkSoft,
     lineHeight: 20,
     marginBottom: 8,
   },
-
-  time: {
-    fontSize: 12,
-    color: colors.inkSoft,
-  },
+  time: { fontSize: 12, color: colors.inkSoft },
 });
